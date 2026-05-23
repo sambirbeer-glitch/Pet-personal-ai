@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PetPersona AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --surface: #fcf8ff; --primary: #9b4500; --secondary: #006a65; --on-surface: #151546;
+        }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: var(--surface); color: var(--on-surface); }
+        .font-quicksand { font-family: 'Quicksand', sans-serif; }
+        
+        /* Kinetic Animations */
+        .bounce-click:active { transform: scale(0.95); }
+        .transition-kinetic { transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        
+        /* Hide scrollbars */
+        ::-webkit-scrollbar { display: none; }
+
+        .voice-bubble::after {
+            content: ''; position: absolute; bottom: -10px; left: 30px;
+            width: 20px; height: 20px; background: white;
+            clip-path: polygon(0 0, 100% 0, 50% 100%);
+        }
+
+        .gradient-overlay {
+            background: linear-gradient(0deg, rgba(21, 21, 70, 0.8) 0%, rgba(21, 21, 70, 0) 50%);
+        }
+
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body x-data="petPersonaApp()" class="antialiased overflow-x-hidden">
+
+    <!-- Top Status Bar -->
+    <header class="fixed top-0 w-full z-[100] px-6 py-4 flex justify-between items-center bg-white/10 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-[#9b4500] rounded-lg flex items-center justify-center text-white font-bold">P</div>
+            <span class="font-quicksand font-bold text-[#151546]">PetPersona</span>
+        </div>
+        <input type="password" x-model="apiKey" placeholder="Gemini API Key" 
+               class="text-[10px] px-3 py-1.5 rounded-full border border-orange-200 outline-none w-28 bg-white/80">
+    </header>
+
+    <!-- Main Screens -->
+    <main class="min-h-screen pb-24">
+        
+        <!-- SCREEN 1: CREATE / UPLOAD -->
+        <div x-show="activeTab === 'create'" x-cloak x-transition:enter="transition-kinetic" class="px-6 pt-24">
+            <h1 class="font-quicksand text-3xl font-bold mb-2">Who's a <span class="text-[#9b4500]">good boy?</span></h1>
+            <p class="text-slate-500 mb-8">Upload a photo to reveal their true soul.</p>
+
+            <!-- Image Picker -->
+            <div @click="$refs.fileInput.click()" 
+                 class="relative aspect-[4/5] rounded-[2.5rem] border-4 border-dashed border-orange-100 bg-white flex flex-col items-center justify-center overflow-hidden cursor-pointer bounce-click">
+                
+                <template x-if="!tempImage">
+                    <div class="text-center p-8">
+                        <div class="text-5xl mb-4">📸</div>
+                        <p class="font-bold text-slate-400">Tap to take or upload a pet photo</p>
+                    </div>
+                </template>
+
+                <template x-if="tempImage">
+                    <img :src="tempImage" class="w-full h-full object-cover">
+                </template>
+
+                <input type="file" x-ref="fileInput" class="hidden" accept="image/*" @change="handleFileUpload">
+            </div>
+
+            <!-- Gender Toggle -->
+            <div class="mt-8 flex gap-4">
+                <button @click="gender = 'male'" :class="gender === 'male' ? 'bg-[#151546] text-white' : 'bg-white border border-slate-200'"
+                        class="flex-1 py-4 rounded-2xl font-bold transition-kinetic bounce-click">Boy 🦴</button>
+                <button @click="gender = 'female'" :class="gender === 'female' ? 'bg-[#151546] text-white' : 'bg-white border border-slate-200'"
+                        class="flex-1 py-4 rounded-2xl font-bold transition-kinetic bounce-click">Girl 🎀</button>
+            </div>
+
+            <!-- Generate Button -->
+            <button @click="generatePersona()" 
+                    :disabled="!tempImage || isLoading"
+                    class="w-full mt-6 py-5 bg-[#9b4500] text-white rounded-[2rem] font-quicksand text-xl font-bold shadow-xl shadow-orange-200 disabled:opacity-50 transition-kinetic bounce-click">
+                <span x-show="!isLoading">Analyze Personality ✨</span>
+                <span x-show="isLoading" class="flex items-center justify-center gap-2">
+                    <svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Reading Paws...
+                </span>
+            </button>
+        </div>
+
+        <!-- SCREEN 2: RESULT (TikTok Style Card) -->
+        <div x-show="activeTab === 'result'" x-cloak x-transition:enter="transition-kinetic" class="h-screen w-full relative">
+            <template x-if="result">
+                <div class="h-full w-full">
+                    <img :src="result.image" class="h-full w-full object-cover">
+                    <div class="absolute inset-0 gradient-overlay"></div>
+                    
+                    <!-- Content Overlay -->
+                    <div class="absolute bottom-28 left-0 w-full px-6 space-y-6">
+                        <!-- AI Quote Bubble -->
+                        <div class="voice-bubble bg-white p-5 relative rounded-[2rem] shadow-2xl animate-bounce-subtle">
+                            <p class="text-[#006a65] font-bold text-[10px] uppercase tracking-widest mb-1" x-text="result.voice_type"></p>
+                            <p class="font-quicksand text-xl font-bold text-[#151546]" x-text="result.dialogue"></p>
+                            <button @click="speak(result.dialogue)" class="absolute right-4 top-4 text-2xl">🔊</button>
+                        </div>
+
+                        <div class="text-white">
+                            <h2 class="text-4xl font-quicksand font-bold" x-text="result.name"></h2>
+                            <p class="opacity-90 font-bold" x-text="result.caption"></p>
+                            
+                            <div class="flex gap-2 mt-4 overflow-x-auto">
+                                <span class="bg-[#79f3ea] text-[#006f69] px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap" x-text="result.mood"></span>
+                                <span class="bg-white/20 backdrop-blur-md text-white px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap" x-text="result.personality"></span>
+                            </div>
+                        </div>
+
+                        <!-- Funny Thought Card -->
+                        <div class="bg-white/10 backdrop-blur-lg border border-white/20 rounded-3xl p-4">
+                            <p class="text-[10px] text-orange-300 font-bold uppercase">Inside their head:</p>
+                            <p class="text-white text-sm italic" x-text="result.funny_thought"></p>
+                        </div>
+
+                        <button @click="activeTab = 'create'" class="w-full py-4 bg-white rounded-full text-[#151546] font-bold">Create Another</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- SCREEN 3: LIBRARY -->
+        <div x-show="activeTab === 'library'" x-cloak x-transition:enter="transition-kinetic" class="px-6 pt-24">
+            <h2 class="font-quicksand text-3xl font-bold mb-6">My Pet <span class="text-[#006a65]">Squad</span></h2>
+            <div class="grid grid-cols-2 gap-4">
+                <template x-for="pet in history">
+                    <div class="bg-white rounded-[2rem] overflow-hidden shadow-sm border border-slate-100" @click="loadFromHistory(pet)">
+                        <img :src="pet.image" class="w-full aspect-square object-cover">
+                        <div class="p-3">
+                            <p class="font-bold text-sm" x-text="pet.name"></p>
+                            <p class="text-[10px] text-slate-400" x-text="pet.mood"></p>
+                        </div>
+                    </div>
+                </template>
+                <div x-show="history.length === 0" class="col-span-2 text-center py-20 text-slate-400 italic">No personalities generated yet.</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Navigation Bar -->
+    <nav class="fixed bottom-6 left-6 right-6 bg-[#151546] rounded-full py-3 px-8 flex justify-between items-center shadow-2xl z-[100]">
+        <button @click="activeTab = 'create'" :class="activeTab === 'create' ? 'text-orange-400' : 'text-white/50'" class="p-2 transition-kinetic">📸</button>
+        <button @click="activeTab = 'library'" :class="activeTab === 'library' ? 'text-orange-400' : 'text-white/50'" class="p-2 transition-kinetic">🐾</button>
+    </nav>
+
+    <script>
+        function petPersonaApp() {
+            return {
+                apiKey: '',
+                activeTab: 'create',
+                gender: 'male',
+                tempImage: null,
+                isLoading: false,
+                result: null,
+                history: JSON.parse(localStorage.getItem('petHistory') || '[]'),
+
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => this.tempImage = e.target.result;
+                    reader.readAsDataURL(file);
+                },
+
+                async generatePersona() {
+                    if (!this.apiKey) return alert("Enter Gemini API Key at the top!");
+                    
+                    this.isLoading = true;
+                    const base64Image = this.tempImage.split(',')[1];
+                    
+                    const prompt = `Analyze this ${this.gender} pet's photo. You are a pet expert. Return ONLY a JSON object with these keys: 
+                        name (witty name based on appearance), 
+                        personality (2 words), 
+                        funny_thought (inner monologue), 
+                        mood (one word), 
+                        voice_type (e.g. Grumpy British, Squeaky Teen), 
+                        caption (funny instagram caption), 
+                        dialogue (what they are saying right now).`;
+
+                    try {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{
+                                    parts: [
+                                        { text: prompt },
+                                        { inline_data: { mime_type: "image/jpeg", data: base64Image } }
+                                    ]
+                                }]
+                            })
+                        });
+
+                        const data = await response.json();
+                        const textResult = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "");
+                        const jsonResult = JSON.parse(textResult);
+                        
+                        this.result = { ...jsonResult, image: this.tempImage };
+                        
+                        // Save to History
+                        this.history.unshift(this.result);
+                        localStorage.setItem('petHistory', JSON.stringify(this.history));
+                        
+                        this.activeTab = 'result';
+                        this.tempImage = null;
+                        
+                        // Auto speak after a delay
+                        setTimeout(() => this.speak(this.result.dialogue), 1000);
+                        
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error analyzing pet. Check console or API Key.");
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                loadFromHistory(pet) {
+                    this.result = pet;
+                    this.activeTab = 'result';
+                },
+
+                speak(text) {
+                    window.speechSynthesis.cancel();
+                    const msg = new SpeechSynthesisUtterance(text);
+                    msg.pitch = this.gender === 'male' ? 0.8 : 1.2;
+                    msg.rate = 1;
+                    window.speechSynthesis.speak(msg);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
