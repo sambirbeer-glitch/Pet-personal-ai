@@ -220,10 +220,10 @@
                         setTimeout(() => this.speak(this.result.dialogue), 1000);
                         
                     } catch (err) {
-                        console.error(err);
-                        alert("Error analyzing pet. Check console or API Key.");
-                    } finally {
-                        this.isLoading = false;
+    console.error("FULL ERROR:", err);
+    alert("Error analyzing pet. Check console for details.");
+} finally {
+    this.isLoading = false;
                     }
                 },
 
